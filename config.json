@@ -1,5 +1,6 @@
 {
   "server": { "host": "0.0.0.0", "port": 8090, "debug": false, "cors_allow_origins": ["*"] },
+
   "rabbitmq": {
     "url": "amqps://smqbzeze:xlgdZM_NyZk8akZuWpUTDWpEb-16G4mf@leopard.lmq.cloudamqp.com/smqbzeze",
     "exchange": "tolling.bus",
@@ -7,6 +8,20 @@
     "heartbeat": 30,
     "blocked_timeout": 60
   },
+
+  "broker": {
+    "expose_via_api": true,
+    "teams": {
+      "module2": { "token": "m2token" },
+      "module3": { "token": "m3token" },
+      "module4": { "token": "m4token" },
+      "module5": { "token": "m5token" },
+      "module6": { "token": "m6token" },
+      "module7": { "token": "m7token" },
+      "audit":   { "token": "audittoken" }
+    }
+  },
+
   "topology": {
     "dlx": "tolling.dlx",
     "ttl_ms": 604800000,
