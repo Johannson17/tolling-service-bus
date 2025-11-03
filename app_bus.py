@@ -196,7 +196,7 @@ def build_docs_html() -> str:
     exchange = html.escape(RAB["exchange"])
     dlx = html.escape(TOPO["dlx"])
     url_hint = "amqps://<USER>:<PASS>@<HOST>/<VHOST>  # usar variable de entorno RABBIT_URL"
-    python_pub = f"""import json, pika
+    python_pub = f"""import json, pika, os
 url = os.environ.get("RABBIT_URL")  # setear en el entorno
 params = pika.URLParameters(url)
 conn = pika.BlockingConnection(params)
@@ -236,7 +236,6 @@ def on_msg(ch, method, props, body):
 ch.basic_consume(queue="<QUEUE_NAME>", on_message_callback=on_msg)
 ch.start_consuming()"""
 
-    # JSON ejemplos por evento (coinciden con SCHEMAS)
     examples = {
         "transit.recorded": {
             "event":"transit.recorded","version":"1.0",
@@ -299,7 +298,7 @@ ch.start_consuming()"""
         },
         "customer.upserted": {
             "event":"customer.upserted","version":"1.0",
-            "data":{"customer_id":"C-77","name":"Acme SA","is_active":true},
+            "data":{"customer_id":"C-77","name":"Acme SA","is_active": True},
             "meta":{"occurred_at":"2025-10-20T09:00:00Z","producer":"module6"}
         },
         "vehicle.upserted": {
@@ -310,7 +309,7 @@ ch.start_consuming()"""
         "audit.logged": {
             "event":"audit.logged","version":"1.0",
             "data":{"event_id":"a-1","event_type":"incident","timestamp":"2025-10-26T14:22:33Z",
-                    "toll_name":"Peaje Norte","details":"lane 6 closed","vehicle_id":None},
+                    "toll_name":"Peaje Norte","details":"lane 6 closed","vehicle_id": None},
             "meta":{"occurred_at":"2025-10-26T14:22:33Z","producer":"module3"}
         }
     }
@@ -364,7 +363,6 @@ ch.start_consuming()"""
         }
     }
 
-    # HTML base
     css = """
     body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:0;background:#0b1020;color:#e5e7eb}
     a{color:#8ab4ff;text-decoration:none} a:hover{text-decoration:underline}
@@ -464,7 +462,6 @@ ch.start_consuming()"""
     {_code(json.dumps({"event":"<event-name>","version":"1.0","data":{"...":"..."},"meta":{"occurred_at":"2025-10-26T14:22:33Z","producer":"moduleX","correlation_id":"uuid","causation_id":"uuid"}}, indent=2))}
     """
 
-    # Catálogo de eventos (lista)
     catalogo = """
     <h2 id="catalogo">5. Catálogo de eventos</h2>
     <div class="grid cols-2">
@@ -477,19 +474,16 @@ ch.start_consuming()"""
     </div>
     """
 
-    # Guía por módulo detallada
     def modulo_html(nombre: str, data: Dict[str, Any]) -> str:
         cola = data["cola"]
         recibe = ", ".join(f"<code>{e}</code>" for e in data["recibe"])
         publica = ", ".join(f"<code>{e}</code>" for e in data["publica"]) if data["publica"] else "<span class='muted'>—</span>"
         binds = ", ".join(f"<code>{b}</code>" for b in data["bindings"])
 
-        # ejemplos JSON de publicación de cada evento que publica el módulo
         ejemplos_pub = ""
         for ev in data["publica"]:
             ejemplos_pub += f"<h4>JSON a publicar — <code>{html.escape(ev)}</code></h4>{_code(json.dumps(examples[ev], ensure_ascii=False, indent=2))}"
 
-        # ejemplo consumo base
         consume_code = python_consume_tpl.replace("<QUEUE_NAME>", cola).replace("<BINDING_KEY>", data["bindings"][0])
 
         return f"""
@@ -547,16 +541,35 @@ ch.start_consuming()"""
 <title>Tolling RabbitMQ Bus — Docs</title>
 <style>{css}</style>
 </head><body>
-{header}
-{overview}
-{conexion}
-{topologia}
-{envelope}
-{catalogo}
-{modulos}
-{pruebas}
-{reglas}
-</div></div>
+<div class="layout">
+  <div class="side">
+    <div class="brand">Tolling RabbitMQ Bus</div>
+    <div class="small muted">Realtime entre módulos por AMQP</div>
+    <div class="hr"></div>
+    <div class="toc">
+      <a href="#overview">1. Overview</a>
+      <a href="#conexion">2. Conexión</a>
+      <a href="#topologia">3. Topología</a>
+      <a href="#envelope">4. Envelope</a>
+      <a href="#catalogo">5. Catálogo de eventos</a>
+      <a href="#modulos">6. Guía por módulo</a>
+      <a href="#pruebas">7. Pruebas y utilitarios</a>
+      <a href="#reglas">8. Reglas de operación</a>
+    </div>
+  </div>
+  <div class="main">
+    <h1>Documento funcional — Bus RabbitMQ</h1>
+    <div class="small muted">Webservice utilitario: <a href="{html.escape(SERVICE_URL)}">{html.escape(SERVICE_URL)}</a> · Health/Docs/Publish de prueba</div>
+    {overview}
+    {conexion}
+    {topologia}
+    {envelope}
+    {catalogo}
+    {modulos}
+    {pruebas}
+    {reglas}
+  </div>
+</div>
 </body></html>"""
     return html_page
 
