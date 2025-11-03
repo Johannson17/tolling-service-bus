@@ -481,7 +481,6 @@ def docs():
   <section class="module">
     <h2>Broker de prueba</h2>
     <table class="kv">
-      <tr><td>AMQP URL (compartida)</td><td><code>{_esc(RABBIT_URL)}</code></td></tr>
       <tr><td>Host</td><td><code>{_esc(BROKER_HOST)}</code></td></tr>
       <tr><td>VHost</td><td><code>{_esc(BROKER_VHOST)}</code></td></tr>
       <tr><td>Exchange</td><td><code>{_esc(EXCHANGE_NAME)}</code> (topic)</td></tr>
