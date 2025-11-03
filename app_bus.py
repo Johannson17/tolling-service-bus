@@ -265,7 +265,7 @@ USERS_DEFAULT = {
 }
 MODULE_TOKENS = json.loads(os.getenv("MODULE_TOKENS_JSON", json.dumps(TOKENS_DEFAULT)))
 MODULE_USERS  = json.loads(os.getenv("MODULE_USERS_JSON",  json.dumps(USERS_DEFAULT)))
-USE_SHARED    = os.getenv("USE_SHARED_ACCOUNT", "false").lower() == "true"
+USE_SHARED    = os.getenv("USE_SHARED_ACCOUNT", "true").lower() == "true"
 
 def _policy_for_module(mod_code: str) -> Dict[str, Any]:
   # Arma listas de routing keys permitidas para publicar/consumir segun catálogo
