@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Tolling Service Bus — Docs (Rabbit-only)
+Tolling Service Bus — Docs (Rabbit-only, sin API de prueba)
 
-- /docs: documentación por Módulo (qué publica/consume), con JSONs y routing keys.
+- /docs: documentación por Módulo (qué publica/consume), con JSON y routing keys.
 - /health: ping simple.
-- Sin endpoints de prueba ni sandbox HTTP.
-- No depende de archivos externos: catálogos embebidos con override opcional por env/archivo.
+- Sin dependencias a archivos externos: catálogos embebidos; se pueden overridear por ENV.
 
 ENV opcionales:
-  RABBIT_URL o RABBITMQ_URL   → amqps://user:pass@host/vhost  (solo para mostrar y /health)
-  DOCS_MODULES_JSON           → JSON string con módulos (override)
-  DOCS_MODULES_PATH           → ruta a JSON de módulos (override)
-  EVENTS_CATALOG_JSON         → JSON string con eventos (override)
-  EVENTS_CATALOG_PATH         → ruta a JSON de eventos (override)
+  RABBIT_URL o RABBITMQ_URL      → amqps://user:pass@host/vhost (solo mostrar y /health)
+  DOCS_MODULES_JSON / _PATH      → JSON de módulos (override)
+  EVENTS_CATALOG_JSON / _PATH    → JSON de eventos (override)
 
 Procfile:
   web: gunicorn -w 2 -b 0.0.0.0:$PORT app_bus:app
@@ -34,6 +31,7 @@ RABBIT_URL = os.getenv("RABBIT_URL") or os.getenv("RABBITMQ_URL") or ""
 # Catálogo EMBEBIDO por defecto (EVENTOS)
 # -----------------------------------------------------------
 EVENTS_DEFAULT: Dict[str, Any] = {
+  # Captura / Reconocimiento
   "lane.passage.detected": {
     "routing_key": "lane.passage.detected",
     "description_es": "Pasada detectada en carril por LPR/RFID con metadatos.",
@@ -42,25 +40,11 @@ EVENTS_DEFAULT: Dict[str, Any] = {
       "toll_id": "TOLL-01",
       "lane_id": "L-05",
       "timestamp_utc": "2025-11-03T15:10:22Z",
-      "plate": "ABC123",
-      "vehicle_class": "car",
-      "tag_id": "TAG-9981",
-      "confidence": 0.97,
-      "source": "lpr"
+      "plate_raw": "ABC123?",           # string crudo
+      "vehicle_class_hint": "car",      # si existe
+      "source": "lpr"                   # lpr/rfid/manual/sim
     },
-    "notes_es": "Se publica inmediatamente al detectar el vehículo."
-  },
-  "lane.status.changed": {
-    "routing_key": "lane.status.changed",
-    "description_es": "Cambio de estado de carril (abierto/cerrado, modo).",
-    "payload_example": {
-      "toll_id": "TOLL-01",
-      "lane_id": "L-05",
-      "status": "open",
-      "mode": "manual",
-      "timestamp_utc": "2025-11-03T15:05:00Z"
-    },
-    "notes_es": ""
+    "notes_es": "Detección bruta: puede traer plate_raw (no validada)."
   },
   "evidence.image.captured": {
     "routing_key": "evidence.image.captured",
@@ -72,35 +56,38 @@ EVENTS_DEFAULT: Dict[str, Any] = {
       "uri": "s3://bucket/evidence/evt-7f3c.jpg",
       "timestamp_utc": "2025-11-03T15:10:22Z"
     },
-    "notes_es": "La media vive fuera del bus."
+    "notes_es": "La media vive fuera del bus; acá se manda la URI."
   },
-  "tariff.lookup.request": {
-    "routing_key": "tariff.lookup.request",
-    "description_es": "Solicitud para resolver tarifa aplicable.",
+  "lane.status.changed": {
+    "routing_key": "lane.status.changed",
+    "description_es": "Cambio de estado de carril (abierto/cerrado, modo).",
     "payload_example": {
-      "event_id": "evt-7f3c",
-      "vehicle_class": "car",
       "toll_id": "TOLL-01",
-      "timestamp_utc": "2025-11-03T15:10:22Z"
+      "lane_id": "L-05",
+      "status": "open",                 # open/closed/error
+      "mode": "manual",                 # manual/auto
+      "timestamp_utc": "2025-11-03T15:05:00Z"
     },
     "notes_es": ""
   },
-  "tariff.lookup.response": {
-    "routing_key": "tariff.lookup.response",
-    "description_es": "Respuesta con tarifa aplicada.",
+  "plate.recognition.result": {
+    "routing_key": "plate.recognition.result",
+    "description_es": "Resultado de reconocimiento de patente (válida o no reconocida).",
     "payload_example": {
       "event_id": "evt-7f3c",
-      "tariff_code": "CAR_DAY",
-      "amount": 1200,
-      "currency": "ARS",
-      "valid_from": "2025-11-01",
-      "valid_to": "2025-12-31"
+      "recognized": True,
+      "plate": "ABC123",
+      "format": "mercosur",
+      "confidence": 0.97,
+      "timestamp_utc": "2025-11-03T15:10:23Z"
     },
-    "notes_es": "Correlacionar por event_id."
+    "notes_es": "Si recognized=false, plate puede omitirse; se usará para multas."
   },
+
+  # Tarifas / Config
   "tariff.catalog.request": {
     "routing_key": "tariff.catalog.request",
-    "description_es": "Pedido de catálogo vigente.",
+    "description_es": "Pedido del catálogo de tarifas vigente.",
     "payload_example": {
       "request_id": "req-catalog-001",
       "requested_at_utc": "2025-11-03T15:00:00Z"
@@ -109,59 +96,91 @@ EVENTS_DEFAULT: Dict[str, Any] = {
   },
   "tariff.catalog.updated": {
     "routing_key": "tariff.catalog.updated",
-    "description_es": "Broadcast de catálogo actualizado.",
+    "description_es": "Broadcast de catálogo de tarifas actualizado.",
     "payload_example": {
       "version": "2025.11.01",
       "published_at_utc": "2025-11-01T00:00:00Z"
     },
-    "notes_es": "Los consumidores deben refrescar cache."
+    "notes_es": "Consumidores deben refrescar cache."
   },
+  "admin.config.updated": {
+    "routing_key": "admin.config.updated",
+    "description_es": "Actualización de parámetros de panel (valores de peaje, reglas, multas).",
+    "payload_example": {
+      "config_id": "cfg-20251103",
+      "keys_changed": ["toll.amount.base", "fine.amount.unrecognized_plate"],
+      "published_at_utc": "2025-11-03T12:00:00Z"
+    },
+    "notes_es": "Fuente: M7 Panel."
+  },
+
+  # Pagos
   "payment.authorize.request": {
     "routing_key": "payment.authorize.request",
-    "description_es": "Solicitud de autorización de pago (efectivo/tarjeta/tag).",
+    "description_es": "Solicitud de autorización de pago.",
     "payload_example": {
       "event_id": "evt-7f3c",
-      "method": "prepay",
+      "concept": "toll",                # toll/fine
       "amount": 1200,
       "currency": "ARS",
-      "account_id": "ACC-1234"
+      "account_id": "ACC-1234",
+      "method": "prepay"               # prepay/card/cash
     },
     "notes_es": ""
   },
   "payment.decision.result": {
     "routing_key": "payment.decision.result",
-    "description_es": "Resultado lógico de decisión de pago.",
+    "description_es": "Resultado de intento de pago (success/fail/pending).",
     "payload_example": {
       "event_id": "evt-7f3c",
-      "decision": "charge",
-      "reason": "default_flow"
+      "status": "success",              # success/fail/pending
+      "reason": "ok",
+      "tx_id": "TX-9912",
+      "timestamp_utc": "2025-11-03T15:10:30Z"
     },
-    "notes_es": ""
+    "notes_es": "Si success → se publica payment.confirmed."
   },
   "payment.confirmed": {
     "routing_key": "payment.confirmed",
     "description_es": "Confirmación de cobro realizado.",
     "payload_example": {
       "event_id": "evt-7f3c",
+      "concept": "toll",
       "amount": 1200,
       "currency": "ARS",
       "method": "prepay",
-      "confirmed_at_utc": "2025-11-03T15:10:30Z",
-      "tx_id": "TX-9912"
+      "tx_id": "TX-9912",
+      "confirmed_at_utc": "2025-11-03T15:10:31Z"
     },
     "notes_es": ""
   },
-  "prepay.balance.changed": {
-    "routing_key": "prepay.balance.changed",
-    "description_es": "Cambio de balance de cuenta prepaga.",
+
+  # Multas
+  "enforcement.decision.result": {
+    "routing_key": "enforcement.decision.result",
+    "description_es": "Resultado de control (ok/observed/evasion).",
     "payload_example": {
-      "account_id": "ACC-1234",
-      "delta": -1200,
-      "balance": 8800,
-      "timestamp_utc": "2025-11-03T15:10:31Z"
+      "event_id": "evt-7f3c",
+      "status": "evasion",
+      "reason": "unrecognized_plate"
+    },
+    "notes_es": "Usado por M5 para emitir multas."
+  },
+  "fine.issued": {
+    "routing_key": "fine.issued",
+    "description_es": "Multa emitida.",
+    "payload_example": {
+      "fine_id": "F-8821",
+      "event_id": "evt-7f3c",
+      "plate": "ABC123",
+      "amount": 20000,
+      "currency": "ARS",
+      "issued_at_utc": "2025-11-03T15:12:00Z"
     },
     "notes_es": ""
   },
+
+  # Facturación
   "invoice.issue.request": {
     "routing_key": "invoice.issue.request",
     "description_es": "Solicitud de emisión de factura/recibo.",
@@ -187,183 +206,97 @@ EVENTS_DEFAULT: Dict[str, Any] = {
     },
     "notes_es": ""
   },
-  "enforcement.decision.result": {
-    "routing_key": "enforcement.decision.result",
-    "description_es": "Resultado de control: OK / Observado / Evasión.",
+
+  # Seguridad / Usuarios
+  "auth.user.created": {
+    "routing_key": "auth.user.created",
+    "description_es": "Alta de usuario del sistema (roles operativos/administrativos).",
     "payload_example": {
-      "event_id": "evt-7f3c",
-      "status": "ok",
-      "reason": "payment_confirmed"
+      "user_id": "U-1001",
+      "email": "op@example.com",
+      "roles": ["operator"]
     },
-    "notes_es": ""
+    "notes_es": "Fuente: M8."
   },
-  "fine.issued": {
-    "routing_key": "fine.issued",
-    "description_es": "Multa emitida por evasión u otra infracción.",
+  "auth.role.assigned": {
+    "routing_key": "auth.role.assigned",
+    "description_es": "Asignación/actualización de rol.",
     "payload_example": {
-      "fine_id": "F-8821",
-      "event_id": "evt-7f3c",
-      "plate": "ABC123",
-      "amount": 20000,
-      "currency": "ARS",
-      "issued_at_utc": "2025-11-03T15:12:00Z"
+      "user_id": "U-1001",
+      "roles": ["operator","auditor"],
+      "timestamp_utc": "2025-11-03T10:00:00Z"
     },
-    "notes_es": ""
+    "notes_es": "Fuente: M8."
   },
-  "master.customer.request": {
-    "routing_key": "master.customer.request",
-    "description_es": "Pedido de datos de cliente.",
+
+  # Logs centralizados
+  "log.app": {
+    "routing_key": "log.app",
+    "description_es": "Log de aplicación (nivel/info/error, componente, mensaje).",
     "payload_example": {
-      "request_id": "req-cust-01",
-      "customer_id": "C-77"
+      "component": "payments",
+      "level": "info",
+      "message": "Authorized payment",
+      "timestamp_utc": "2025-11-03T15:10:32Z",
+      "correlation_id": "evt-7f3c"
     },
-    "notes_es": ""
-  },
-  "master.customer.updated": {
-    "routing_key": "master.customer.updated",
-    "description_es": "Actualización/alta de cliente.",
-    "payload_example": {
-      "customer_id": "C-77",
-      "name": "Acme SA",
-      "is_active": True
-    },
-    "notes_es": ""
-  },
-  "master.vehicle.request": {
-    "routing_key": "master.vehicle.request",
-    "description_es": "Pedido de datos de vehículo.",
-    "payload_example": {
-      "request_id": "req-veh-01",
-      "plate": "ABC123"
-    },
-    "notes_es": ""
-  },
-  "master.vehicle.updated": {
-    "routing_key": "master.vehicle.updated",
-    "description_es": "Actualización/alta de vehículo.",
-    "payload_example": {
-      "plate": "ABC123",
-      "customer_id": "C-77",
-      "class": "car"
-    },
-    "notes_es": ""
-  },
-  "device.status.changed": {
-    "routing_key": "device.status.changed",
-    "description_es": "Cambio de estado de dispositivo (cámara, barrera, POS).",
-    "payload_example": {
-      "device_id": "DEV-001",
-      "type": "camera",
-      "status": "online",
-      "timestamp_utc": "2025-11-03T15:00:00Z"
-    },
-    "notes_es": ""
-  },
-  "ops.shift.opened": {
-    "routing_key": "ops.shift.opened",
-    "description_es": "Apertura de turno de caja/operación.",
-    "payload_example": {
-      "shift_id": "S-20251103-1",
-      "toll_id": "TOLL-01",
-      "operator_id": "OP-33",
-      "opened_at_utc": "2025-11-03T12:00:00Z"
-    },
-    "notes_es": ""
-  },
-  "ops.shift.closed": {
-    "routing_key": "ops.shift.closed",
-    "description_es": "Cierre de turno de caja/operación.",
-    "payload_example": {
-      "shift_id": "S-20251103-1",
-      "toll_id": "TOLL-01",
-      "operator_id": "OP-33",
-      "closed_at_utc": "2025-11-03T20:00:00Z",
-      "totals": { "payments": 150, "amount": 180000 }
-    },
-    "notes_es": ""
-  },
-  "ops.manual.override": {
-    "routing_key": "ops.manual.override",
-    "description_es": "Acción manual de backoffice/operador.",
-    "payload_example": {
-      "actor_id": "OP-33",
-      "action": "open_barrier",
-      "reason": "emergency",
-      "toll_id": "TOLL-01",
-      "lane_id": "L-05",
-      "timestamp_utc": "2025-11-03T15:06:00Z"
-    },
-    "notes_es": ""
-  },
-  "audit.event.logged": {
-    "routing_key": "audit.event.logged",
-    "description_es": "Evento de auditoría (trazabilidad).",
-    "payload_example": {
-      "audit_id": "aud-991",
-      "event_type": "lane_override",
-      "message": "Barrier opened manually",
-      "timestamp_utc": "2025-11-03T15:06:01Z",
-      "actor_id": "OP-33",
-      "scope": "lane:L-05"
-    },
-    "notes_es": ""
+    "notes_es": "Todos los módulos publican."
   }
 }
 
 # -----------------------------------------------------------
-# Catálogo EMBEBIDO por defecto (MÓDULOS)
-#   M3 = USTEDES (Operación y Backoffice)
+# Catálogo EMBEBIDO por defecto (MÓDULOS) — M3 EXCLUIDO
 # -----------------------------------------------------------
 DOCS_MODULES_DEFAULT = {
   "modules": [
     {
       "code": "M1",
-      "name_es": "Captura en Carril (LPR/RFID/Barrera)",
-      "summary_es": "Detecta pasadas en tiempo real y reporta estado de carriles.",
-      "publishes": ["lane.passage.detected", "lane.status.changed", "evidence.image.captured"],
-      "subscribes": ["tariff.lookup.response", "payment.decision.result", "enforcement.decision.result"]
+      "name_es": "Servicio de Control de Tránsito",
+      "summary_es": "Registra vehículos, estadísticas en tiempo real y se integra con Reconocimiento.",
+      "publishes": ["lane.passage.detected", "evidence.image.captured", "lane.status.changed", "log.app"],
+      "subscribes": ["plate.recognition.result", "enforcement.decision.result"]
     },
     {
       "code": "M2",
-      "name_es": "Motor de Tarifas y Categorías",
-      "summary_es": "Resuelve tarifa aplicable y publica catálogos de tarifas/categorías.",
-      "publishes": ["tariff.lookup.response", "tariff.catalog.updated"],
-      "subscribes": ["tariff.lookup.request", "tariff.catalog.request"]
-    },
-    {
-      "code": "M3",
-      "name_es": "Operación y Backoffice (USTEDES)",
-      "summary_es": "Orquesta operación, turnos, auditoría y ajustes.",
-      "publishes": ["ops.shift.opened", "ops.shift.closed", "ops.manual.override", "audit.event.logged"],
-      "subscribes": ["lane.passage.detected", "payment.confirmed", "tariff.catalog.updated", "enforcement.decision.result"]
+      "name_es": "Servicio de Reconocimiento de Patentes",
+      "summary_es": "Procesa imágenes/simulaciones y emite resultado de patente.",
+      "publishes": ["plate.recognition.result", "log.app"],
+      "subscribes": ["lane.passage.detected"]
     },
     {
       "code": "M4",
-      "name_es": "Pagos / Prepago / Cobranzas",
-      "summary_es": "Autoriza pagos, maneja wallet/prepago y confirma cobranzas.",
-      "publishes": ["payment.confirmed", "prepay.balance.changed", "invoice.issued"],
-      "subscribes": ["payment.authorize.request", "invoice.issue.request"]
+      "name_es": "Servicio de Multas",
+      "summary_es": "Detecta infracciones y emite multas según reglas vigentes.",
+      "publishes": ["fine.issued", "log.app"],
+      "subscribes": ["plate.recognition.result", "enforcement.decision.result", "payment.decision.result"]
     },
     {
       "code": "M5",
-      "name_es": "Infracciones y Multas",
-      "summary_es": "Detecta evasiones, genera y publica multas.",
-      "publishes": ["enforcement.decision.result", "fine.issued"],
-      "subscribes": ["lane.passage.detected", "payment.decision.result", "evidence.image.captured"]
+      "name_es": "Servicio de Pagos",
+      "summary_es": "Procesa cobros (prepago/tarjeta/simulado) y confirma transacciones.",
+      "publishes": ["payment.decision.result", "payment.confirmed", "log.app"],
+      "subscribes": ["payment.authorize.request"]
     },
     {
       "code": "M6",
-      "name_es": "Maestros y Catálogos",
-      "summary_es": "Mantiene clientes, vehículos y dispositivos.",
-      "publishes": ["master.customer.updated", "master.vehicle.updated", "device.status.changed"],
-      "subscribes": ["master.customer.request", "master.vehicle.request"]
+      "name_es": "Servicio de Facturación",
+      "summary_es": "Consolida cobros y emite comprobantes/reportes.",
+      "publishes": ["invoice.issued", "log.app"],
+      "subscribes": ["payment.confirmed", "fine.issued", "invoice.issue.request"]
     },
     {
       "code": "M7",
-      "name_es": "Dashboard y Reportes",
-      "summary_es": "Consume eventos operativos y de negocio para tableros.",
-      "publishes": [],
-      "subscribes": ["audit.event.logged", "payment.confirmed", "lane.status.changed", "fine.issued"]
+      "name_es": "Panel de Administración y Configuración",
+      "summary_es": "UI para operador; publica parámetros de peaje y muestra estado global.",
+      "publishes": ["admin.config.updated", "tariff.catalog.updated", "log.app"],
+      "subscribes": ["lane.status.changed", "invoice.issued", "log.app"]
+    },
+    {
+      "code": "M8",
+      "name_es": "Seguridad y Usuarios",
+      "summary_es": "Autenticación y autorización; gestiona roles.",
+      "publishes": ["auth.user.created", "auth.role.assigned", "log.app"],
+      "subscribes": []
     }
   ]
 }
@@ -434,7 +367,7 @@ def _module_section(mod: Dict[str, Any]) -> str:
     <div class="howto">
       <h3>Cómo conectarse (RabbitMQ)</h3>
       <ol>
-        <li>Solicitar credenciales (usuario/clave) al equipo de Integración.</li>
+        <li>Solicitar credenciales (usuario/clave) al equipo de Infraestructura (M3).</li>
         <li>Broker URL: <code>{html.escape(RABBIT_URL) if RABBIT_URL else "<configurar RABBIT_URL>"}</code></li>
         <li>Exchange: <code>tolling.bus</code> (tipo: <code>topic</code>, durable).</li>
         <li>Publicar usando la <code>routing_key</code> de cada evento de “Publica”.</li>
@@ -481,18 +414,16 @@ def _docs():
     <style>{CSS}</style></head><body>
     <header><div class="wrap">
       <h1>Tolling Service Bus — Documentación</h1>
-      <div class="meta">Eventos por Módulo según consignas. Broker: <code>{html.escape(RABBIT_URL) if RABBIT_URL else "no configurado"}</code> — Exchange: <code>tolling.bus</code> (topic)</div>
+      <div class="meta">Eventos por módulo. Broker: <code>{html.escape(RABBIT_URL) if RABBIT_URL else "no configurado"}</code> — Exchange: <code>tolling.bus</code> (topic)</div>
     </div></header>
     <main><div class="wrap">{sections}</div></main>
-    <footer>© Trabajo Práctico. Generado por app_bus.py embebido.</footer>
+    <footer>© Trabajo Práctico. Docs generadas por app_bus.py. M3 (Infraestructura) no usa el bus y no se muestra.</footer>
   </body></html>"""
   return Response(html_doc, mimetype="text/html; charset=utf-8")
 
 # -----------------------------------------------------------
 # Entry
 # -----------------------------------------------------------
-app_title = "Tolling Service Bus — Docs"
-app.config["APPLICATION_ROOT"] = "/"
-
+app = app  # explicit
 if __name__ == "__main__":
   app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
