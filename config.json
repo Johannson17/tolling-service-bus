@@ -1,7 +1,7 @@
 {
   "server": { "host": "0.0.0.0", "port": 8090, "debug": false, "cors_allow_origins": ["*"] },
   "rabbitmq": {
-    "url": "amqps://<USER>:<PASS>@<HOST>/<VHOST>",
+    "url": "amqps://smqbzeze:xlgdZM_NyZk8akZuWpUTDWpEb-16G4mf@leopard.lmq.cloudamqp.com/smqbzeze",
     "exchange": "tolling.bus",
     "exchange_type": "topic",
     "heartbeat": 30,
@@ -14,9 +14,9 @@
       { "name": "module2.rates.q",     "bindings": ["rate.*", "vehicle.category.*", "audit.*"] },
       { "name": "module3.ops.q",       "bindings": ["transit.*", "toll.*", "plate.*", "audit.*"] },
       { "name": "module4.payments.q",  "bindings": ["payment.*", "debt.*", "prepaid.*", "audit.*"] },
-      { "name": "module5.fines.q",     "bindings": ["fine.*", "transit.unidentified", "audit.*"] },
+      { "name": "module5.fines.q",     "bindings": ["fine.*", "audit.*"] },
       { "name": "module6.external.q",  "bindings": ["customer.*", "vehicle.upserted", "prepaid.balance.*"] },
-      { "name": "module7.dashboard.q", "bindings": ["#.**"] },
+      { "name": "module7.dashboard.q", "bindings": ["#"] },
       { "name": "audit.q",             "bindings": ["audit.*"] }
     ]
   }
