@@ -1,38 +1,223 @@
 {
-  "server": { "host": "0.0.0.0", "port": 8090, "debug": false, "cors_allow_origins": ["*"] },
-
-  "rabbitmq": {
-    "url": "amqps://smqbzeze:xlgdZM_NyZk8akZuWpUTDWpEb-16G4mf@leopard.lmq.cloudamqp.com/smqbzeze",
+  "rabbit": {
+    "host": "leopard.lmq.cloudamqp.com",
+    "vhost": "smqbzeze",
+    "admin_user": "smqbzeze",
+    "admin_pass": "xlgdZM_NyZk8akZuWpUTDWpEb-16G4mf",
     "exchange": "tolling.bus",
     "exchange_type": "topic",
-    "heartbeat": 30,
-    "blocked_timeout": 60
+    "dlx": "tolling.dlx",
+    "ttl_ms": 604800000
   },
 
-  "broker": {
-    "expose_via_api": true,
-    "teams": {
-      "module2": { "token": "m2token" },
-      "module3": { "token": "m3token" },
-      "module4": { "token": "m4token" },
-      "module5": { "token": "m5token" },
-      "module6": { "token": "m6token" },
-      "module7": { "token": "m7token" },
-      "audit":   { "token": "audittoken" }
+  "modules": {
+    "module2": {
+      "username": "module2",
+      "password": "m2_Strong_ChangeMe",
+      "queue": "module2.rates.q",
+      "bindings": ["rate.*", "vehicle.category.*", "audit.*"],
+      "can_publish": ["rate.updated", "vehicle.category.changed"]
+    },
+    "module3": {
+      "username": "module3",
+      "password": "m3_Strong_ChangeMe",
+      "queue": "module3.ops.q",
+      "bindings": ["rate.updated", "vehicle.category.changed", "vehicle.upserted", "audit.*"],
+      "can_publish": ["transit.recorded", "plate.captured", "toll.status.updated"]
+    },
+    "module4": {
+      "username": "module4",
+      "password": "m4_Strong_ChangeMe",
+      "queue": "module4.payments.q",
+      "bindings": ["transit.recorded", "rate.updated", "vehicle.upserted", "audit.*"],
+      "can_publish": ["payment.recorded", "prepaid.balance.updated", "debt.created", "debt.settled"]
+    },
+    "module5": {
+      "username": "module5",
+      "password": "m5_Strong_ChangeMe",
+      "queue": "module5.fines.q",
+      "bindings": ["plate.captured", "transit.recorded", "vehicle.upserted", "audit.*"],
+      "can_publish": ["fine.issued"]
+    },
+    "module6": {
+      "username": "module6",
+      "password": "m6_Strong_ChangeMe",
+      "queue": "module6.external.q",
+      "bindings": ["prepaid.balance.*", "audit.*"],
+      "can_publish": ["customer.upserted", "vehicle.upserted"]
+    },
+    "module7": {
+      "username": "module7",
+      "password": "m7_Strong_ChangeMe",
+      "queue": "module7.dashboard.q",
+      "bindings": ["#"],
+      "can_publish": []
+    },
+    "audit": {
+      "username": "audit",
+      "password": "audit_Strong_ChangeMe",
+      "queue": "audit.q",
+      "bindings": ["audit.*"],
+      "can_publish": ["audit.logged"]
     }
   },
 
-  "topology": {
-    "dlx": "tolling.dlx",
-    "ttl_ms": 604800000,
-    "queues": [
-      { "name": "module2.rates.q",     "bindings": ["rate.*", "vehicle.category.*", "audit.*"] },
-      { "name": "module3.ops.q",       "bindings": ["transit.*", "toll.*", "plate.*", "audit.*"] },
-      { "name": "module4.payments.q",  "bindings": ["payment.*", "debt.*", "prepaid.*", "audit.*"] },
-      { "name": "module5.fines.q",     "bindings": ["fine.*", "audit.*"] },
-      { "name": "module6.external.q",  "bindings": ["customer.*", "vehicle.upserted", "prepaid.balance.*"] },
-      { "name": "module7.dashboard.q", "bindings": ["#"] },
-      { "name": "audit.q",             "bindings": ["audit.*"] }
-    ]
+  "examples": {
+    "transit.recorded": {
+      "event": "transit.recorded",
+      "version": "1.0",
+      "data": {
+        "transit_id": "t-001",
+        "toll_id": "N1",
+        "toll_name": "Peaje Norte",
+        "lane": "3",
+        "vehicle_id": "V-ABC123",
+        "vehicle_type": "car",
+        "timestamp": "2025-10-26T14:22:33Z"
+      },
+      "meta": {
+        "occurred_at": "2025-10-26T14:22:33Z",
+        "producer": "module3",
+        "correlation_id": "corr-1"
+      }
+    },
+    "plate.captured": {
+      "event": "plate.captured",
+      "version": "1.0",
+      "data": {
+        "toll_id": "N1",
+        "lane": "3",
+        "image_id": "img-99",
+        "plate": "ABC123",
+        "confidence": 0.97,
+        "timestamp": "2025-10-26T14:22:35Z"
+      },
+      "meta": { "occurred_at": "2025-10-26T14:22:35Z", "producer": "module3" }
+    },
+    "toll.status.updated": {
+      "event": "toll.status.updated",
+      "version": "1.0",
+      "data": {
+        "toll_id": "N1",
+        "toll_name": "Peaje Norte",
+        "open_lanes": 5,
+        "closed_lanes": 1,
+        "timestamp": "2025-10-26T14:30:00Z"
+      },
+      "meta": { "occurred_at": "2025-10-26T14:30:00Z", "producer": "module3" }
+    },
+    "rate.updated": {
+      "event": "rate.updated",
+      "version": "1.0",
+      "data": {
+        "rate_id": "r-2025-10",
+        "category_id": "car",
+        "peak_price": 1200,
+        "offpeak_price": 900,
+        "valid_from": "2025-10-01",
+        "valid_to": "2026-03-31"
+      },
+      "meta": { "occurred_at": "2025-10-20T10:00:00Z", "producer": "module2" }
+    },
+    "vehicle.category.changed": {
+      "event": "vehicle.category.changed",
+      "version": "1.0",
+      "data": {
+        "vehicle_id": "V-ABC123",
+        "old_category_id": "car",
+        "new_category_id": "truck",
+        "timestamp": "2025-10-25T08:00:00Z"
+      },
+      "meta": { "occurred_at": "2025-10-25T08:00:00Z", "producer": "module2" }
+    },
+    "payment.recorded": {
+      "event": "payment.recorded",
+      "version": "1.0",
+      "data": {
+        "payment_id": "p-1001",
+        "toll_id": "N1",
+        "toll_name": "Peaje Norte",
+        "cashier_id": "c-7",
+        "timestamp": "2025-10-26T15:00:00Z",
+        "payment_method": "cash",
+        "amount": 1200.0,
+        "reason": "toll"
+      },
+      "meta": { "occurred_at": "2025-10-26T15:00:00Z", "producer": "module4" }
+    },
+    "prepaid.balance.updated": {
+      "event": "prepaid.balance.updated",
+      "version": "1.0",
+      "data": {
+        "account_id": "acc-1",
+        "vehicle_id": "V-ABC123",
+        "delta": -1200.0,
+        "balance": 5300.0,
+        "timestamp": "2025-10-26T15:00:01Z",
+        "source": "auto-charge"
+      },
+      "meta": { "occurred_at": "2025-10-26T15:00:01Z", "producer": "module4" }
+    },
+    "debt.created": {
+      "event": "debt.created",
+      "version": "1.0",
+      "data": {
+        "debt_id": "d-42",
+        "vehicle_id": "V-XYZ987",
+        "amount": 25000.0,
+        "origin": "evasion",
+        "timestamp": "2025-10-26T16:05:00Z"
+      },
+      "meta": { "occurred_at": "2025-10-26T16:05:00Z", "producer": "module4" }
+    },
+    "debt.settled": {
+      "event": "debt.settled",
+      "version": "1.0",
+      "data": {
+        "debt_id": "d-42",
+        "vehicle_id": "V-XYZ987",
+        "amount": 25000.0,
+        "timestamp": "2025-10-27T11:00:00Z"
+      },
+      "meta": { "occurred_at": "2025-10-27T11:00:00Z", "producer": "module4" }
+    },
+    "fine.issued": {
+      "event": "fine.issued",
+      "version": "1.0",
+      "data": {
+        "fine_id": "f-9",
+        "vehicle_id": "V-ABC123",
+        "timestamp": "2025-10-26T16:00:00Z",
+        "amount": 25000.0,
+        "infraction_type": "evasion",
+        "state": "open"
+      },
+      "meta": { "occurred_at": "2025-10-26T16:00:00Z", "producer": "module5" }
+    },
+    "customer.upserted": {
+      "event": "customer.upserted",
+      "version": "1.0",
+      "data": { "customer_id": "C-77", "name": "Acme SA", "is_active": true },
+      "meta": { "occurred_at": "2025-10-20T09:00:00Z", "producer": "module6" }
+    },
+    "vehicle.upserted": {
+      "event": "vehicle.upserted",
+      "version": "1.0",
+      "data": { "vehicle_id": "V-ABC123", "plate": "ABC123", "category_id": "car" },
+      "meta": { "occurred_at": "2025-10-20T09:05:00Z", "producer": "module6" }
+    },
+    "audit.logged": {
+      "event": "audit.logged",
+      "version": "1.0",
+      "data": {
+        "event_id": "a-1",
+        "event_type": "incident",
+        "timestamp": "2025-10-26T14:22:33Z",
+        "toll_name": "Peaje Norte",
+        "details": "lane 6 closed",
+        "vehicle_id": null
+      },
+      "meta": { "occurred_at": "2025-10-26T14:22:33Z", "producer": "module3" }
+    }
   }
 }
